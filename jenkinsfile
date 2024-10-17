@@ -1,0 +1,59 @@
+pipeline {
+    agent {
+  label 'docker-slave'
+}
+
+    stages {
+        stage('checkout-code'){
+            steps {
+                //checkout scmGit(branches: [[name: '*/master']], extensions: [], userRemoteConfigs: [[credentialsId: 'github-creds', url: 'https://github.com/Meny007/super-app.git']])
+                git url: 'https://github.com/Meny007/super-app.git', branch: 'main', credentialsId: 'github-creds'
+            }
+        }
+        stage('Build-Docker-Image') {
+            steps {
+                script {
+                    //Build docker images
+                    sh '/usr/bin/docker-compose build'
+                }
+                //sh "/usr/local/bin/docker-compose build"
+            }
+        }
+        stage('Tag-Image') {
+            steps {
+                script {
+                    sh 'docker tag super-app-pipeline_node mnnahon/super-app_node:latest'
+                    sh 'docker tag super-app-pipeline_php mnnahon/super-app_php:latest'
+                }
+            }
+        }
+        stage('Test') {
+            steps {
+                script {
+                    sh '/usr/bin/docker-compose up -d'
+                    
+                    sleep(20)
+                    
+                    sh 'curl -f http://10.100.102.22:80'
+                }
+            }
+        }
+        stage('Push-Image') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'docker-cred', passwordVariable: 'docker_password', usernameVariable: 'docker_username')]) {
+                sh "docker login -u $docker_username -p $docker_password"
+                sh "docker push mnnahon/super-app_node:latest"
+                sh "docker push mnnahon/super-app_php:latest"
+                }
+            }
+        }
+    }
+    post {
+        always {
+            script {
+                sh '/usr/bin/docker-compose down'
+                cleanWs()
+            }
+        }
+    }
+}
